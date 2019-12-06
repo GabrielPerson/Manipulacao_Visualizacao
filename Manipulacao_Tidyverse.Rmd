@@ -1,0 +1,529 @@
+---
+title: "Manipulando com R"
+subtitle: "Parte 2 - Pipe, Dplyr, Tidyr e Purrr"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Explorando funcionalidades do conjunto de pacotes Tidyverse
+
+O objetivo deste tutorial é pincelar as principais funções de manipulação de alguns pacotes mais utilizados dentro do pacote Tidyverse. 
+
+Aqui, você aprenderá um pouco sobre:
+
+- Operador Pipe
+- Tibble
+- Dplyr 
+- Tidyr
+- Purrr
+
+Os pacotes que utilizaremos aqui pertencem ao pacote tidyverse, que é o "universo limpo", que engloba pacotes como tibble, tidyr, purrr, dplyr e ggplot2. Tudo produzido pelo Hadley Wickham.
+
+Para introduzir qualquer conceito do dplyr ou tidyr, é importante primeiro aprender sobre o **operador pipe: %>%** e também sobre a estrutura **data frame e tibble**.
+
+Após entender estes dois conceitos, iremos explorar funções com foco em manipulação.
+
+
+```{r}
+require(tidyverse)
+```
+
+
+# Operador Pipe: %>%
+
+**A função dele é muito simples: passa o que está do lado esquerdo como primeiro argumento do que está do lado direito:** 
+
+a %>% funcao() **é o mesmo que** funcao(a)
+
+E o mesmo vale para a %>% funcao(b) **é o mesmo que** funcao(a, b)
+
+Temos um exemplo evidenciando logo abaixo. 
+
+Note que embora a função sample seja randômica, toda sequência de sorteios terá o mesmo resultado para a mesma semente.
+
+```{r}
+argumento_1 = c(1, 3, 7, 11, 27, 33)
+
+set.seed(123)
+sample(x = argumento_1, size = 3, replace = TRUE)
+
+set.seed(123)
+argumento_1 %>%
+  sample(size = 3, replace = TRUE)
+```
+
+De primeira vista, isso pode parecer confuso, está tudo bem.
+
+Vamos tentar exemplificar de uma maneira mais elaborada...
+
+Utilizando pseudo-código, vamos supor que seja seu interesse, em ordem: 
+
+1 - Selecionar algumas colunas, 
+
+2 - Filtrar algumas observações baseada em algum valor,
+
+3 - Agrupar por alguma variável de categoria e criar uma nova coluna somando alguma outra coluna por grupo
+
+4 - Ordenar de acordo com a coluna criada
+
+Há duas maneiras simples de se utilizar 4 funções uma em seguida da outra:
+
+**x1 = ordenar(agrupar(filtrar(selecionar(x))))**
+
+ou
+
+**x1 = selecionar(x)**
+
+**x2 = filtrar(x1)**
+
+**x3 = agrupar(x2)**
+
+**x4 = ordenar(x3)**
+
+A primeira alternativa fica um pouco dificil de entender o que foi feito, pois não há uma fluidez na leitura.
+
+A segunda alternativa cria 3 objetos desnecessários no código, mas pelo menos não é difícil de se ler.
+
+**E se tivesse como ter fluidez na leitura, sem criar objetos desnecessários?**
+
+Algo do tipo:
+
+x1 = selecionar() > filtrar() > agrupar() > ordenar()
+
+**Na verdade, é justamente isso que o Operador Pipe realiza**
+
+O código seria:
+
+x1 = selecionar() %>%
+
+  filtrar() %>%
+  
+  agrupar() %>%
+  
+  ordenar()
+  
+A quebra de linhas é apenas para facilitar a visualização, se quiser pode colocar tudo na mesma linha. Dá no mesmo.
+
+Todos os pacotes do **Tidyverse** possibilita esse uso simples do pipe, pois **todas as funções possui como primeiro argumento o objeto em questão**. O que facilita demais realizar a manipulação.
+
+Assim, podemos iniciar nossa manipulação. Iniciando pelo objeto *tibble*.
+
+# Dataframe vs Tibble
+
+Para quem não sabe, Dataframe nada mais é do que uma estrutura capaz de armazenar dados de diferentes tipos. Em que cada coluna corresponde a alguma característica ou métrica. É uma estrutura retangular, ou seja, Todas as linhas tem a mesma quantidade de colunas e todas as colunas tem a mesma quantidade de linhas.
+
+O que pode ocorrer é ter **dados faltantes**, em que o valor "preenchido" em alguma posição é nulo. Porém o formato continua sendo NxM.
+
+A estrutura Tibble possui a mesma premissa de um Dataframe, com algumas melhorias. Iremos verificar por meio de um exemplo:
+
+```{r}
+data.frame(x = 1:7, y = 2, z = NA)
+
+tibble(x = 1:7, y = 2, z = NA)
+
+```
+Ambos retornaram o mesmo resultado, ok!
+
+Vamos tentar novamente:
+
+```{r}
+try(
+  data.frame(x = 1:7, y = 2, z = x + y)
+)
+
+tibble(x = 1:7, y = 2, z = x + y)
+
+```
+O motivo do Dataframe dar erro, é que ele não permite criação de colunas a partir de outras.
+
+Já o tibble sim, dentro de toda função do Tidyverse é possível **chamar** as outras colunas, como se fossem objetos, mas que existem apenas dentro das funções.
+
+Para a criação em si, não faz tanta diferença, pois normalmente pegamos dados prontos e então manipulamos.
+
+Uma vantagem que gosto bastante do Tibble é que ao printar dados no formato tibble, o print será tipo um head(dados) customizado, pois o print será do tamanho do seu Console, omitindo linhas e colunas, e resumindo informações como: Qtd de linhas, Qtd de colunas, nomes das colunas...
+
+Diferentemente do Dataframe, que ao printar, ele irá "explodir" o seu console, dificultando a visualização, fazendo com que você tenha que dar um head(dados).
+
+Caso queira transformar um Dataframe em Tibble é bem simples, basta executar:
+
+```{r}
+iris_novo = as_tibble(iris)
+iris_novo
+```
+**Felizmente, todas as funções que serão apresentadas abaixo, funcionam tanto para DataFrame quanto para Tibble, então não há diferença na manipulação, apenas na visualização.**
+
+
+
+# Dplyr
+Cheatsheet: https://github.com/rstudio/cheatsheets/blob/master/data-transformation.pdf
+
+A biblioteca dplyr é responsável pela grande parte das funções de manipulação do Tidyverse. É como se fosse a gramática do Universo Tidy.
+
+Daremos foco para os principais verbos, e pincelaremos alguns outros conceitos.
+
+Seus principais verbos são:
+
+1 - **Select:** selecionando colunas desejadas,
+
+2 - **Filter:** filtrando linhas de acordo com condições desejadas,
+
+3 - **Mutate:** criando novas colunas a partir de outras,
+
+4 - **Summarise:** resumindo informações de acordo com a necessidade,
+
+5 - **Arrange:** ordenando seus dados de acordo com uma ou mais colunas.
+
+
+Assim, iremos carregar nossos dados e dar uma leve explorada antes de iniciar a manipulação.
+
+```{r}
+dados = read.csv2("C:\\Users\\55169\\Desktop\\Dev\\Manipulacao_Visualizacao\\games_data.csv", sep = ',') %>%
+  as_tibble()
+
+dados
+
+glimpse(dados)
+
+na.omit(dados)
+```
+Percebe-se que a maior parte das colunas são categóricas e estão na classe fator. Em que para cada Jogo, temos a Plataforma, ano de lançamento, gênero, publicador, desenvolvedor e pontuação.
+
+Como métricas, temos o score do usuário, quantidade de usuários, e vendas em geral segmentadas em NA, EU, JP, Outros e a soma de tudo.
+
+Perceba que as colunas de Ano e Sales estão como **fator**, ou seja, não há como realizar operações numéricas. E portanto devemos mudar sua classe para **numeric**.
+
+Vamos então transformá-las, porém não é possível transformar de fator direto para numeric. Como evidenciado abaixo:
+
+```{r}
+x_fator = factor(x = c('71', '55', '121'), levels = c('55', '71', '121'))
+x_fator
+
+as.numeric(x_fator)
+```
+
+Perceba que ele transforma a **ordem do level** e não o valor em si.
+
+Para isso, precisamos primeiro transformar para **character** e logo em seguida para **numeric**
+
+```{r}
+x_fator %>%
+  as.character() %>%
+  as.numeric()
+```
+
+Agora, vamos alterar a classe de nossos dados:
+```{r}
+dados$Year_of_Release = dados$Year_of_Release %>%
+  as.character() %>%
+  as.numeric() 
+
+dados$NA_Sales = dados$NA_Sales %>%
+  as.character() %>%
+  as.numeric()
+
+dados$EU_Sales = dados$EU_Sales %>%
+  as.character() %>%
+  as.numeric()
+
+dados$JP_Sales = dados$JP_Sales %>%
+  as.character() %>%
+  as.numeric()
+
+dados$Other_Sales = dados$Other_Sales %>%
+  as.character() %>%
+  as.numeric()
+
+dados$Global_Sales = dados$Global_Sales %>%
+  as.character() %>%
+  as.numeric()
+```
+**Pronto!!**
+
+
+Perceba também que nossos dados possui quase 17 mil observações, porém ao retirar as observações que contém algum valor NA, na função na.omit(), cai para aproximadamente 7 mil observações. É importante então olhar qual ou quais colunas é responsável por essa perda de informação, e se é relevante mantê-la na análise.
+
+E as colunas responsáveis por isto são as últimas, já que ao pegar até as vendas globais ainda temos quase todas as observações:
+
+```{r}
+dados %>%
+  dplyr::select(Name:Global_Sales) %>%
+  na.omit()
+```
+
+### Select
+Como vimos logo acima, sua função é **selecionar quais colunas desejamos manter ou tirar de nosso conjunto de dados**. E seu uso é bem simples, existem algumas maneiras mais comuns de se fazer isso:
+
+**1 - Passar na mão todas as colunas que desejamos manter, ou retirar:**
+```{r}
+# Manter
+dados %>%
+  dplyr::select(Name, Platform, Genre, Publisher, NA_Sales:Global_Sales)
+
+# Retirar
+dados %>%
+  dplyr::select(-Name, -Platform, -Genre, -Publisher, -(NA_Sales:Global_Sales))
+
+```
+
+**2 - Também há a possibilidade de utilizar facilitadores para escolher as colunas, as principais são:**
+
+- starts_with()
+
+- ends_with()
+
+- contains()
+
+Seus nomes são auto explicativos: elas verificam quais colunas inicia, termina ou contém alguma **string** desejada. Exemplo:
+
+```{r}
+# Manter
+dados %>%
+  dplyr::select(ends_with('Sales'), contains('_of_'), starts_with('Critic'))
+
+# Retirar
+
+dados %>%
+  dplyr::select(-ends_with('Sales'), -contains('_of_'), -starts_with('Critic'))
+```
+
+Simples, não?
+
+O mais legal disso é que é fácil de se ler o código, pois assim você sabe exatamente quais colunas estão sendo operadas, ao contrário de códigos que utiliza de artimanhas do tipo: **dados[, c(1, 2, 3:7, -5)]** em que quem lê não faz ideia do que é cada coluna sem rodar o código e verificar as posições...
+
+**Aprendemos a escolher colunas, mas e para escolher observações (linhas)?**
+
+### Filter
+Um pouco mais sofisticado que o **select**, porém seu raciocínio continua simples.
+
+Vamos supor que você deseja pegar jogos:
+
+- Apenas Genre Puzzle ou Sports
+- Qualquer Publisher, exceto Nintendo
+- Global Sales menor que 60
+- NA Sales menor que 5
+
+Iremos comparar duas maneiras de se fazer isto:
+```{r}
+# Primeira
+dados[dados$Genre %in% c('Puzzle', 'Sports') & dados$Publisher != 'Nintendo' & dados$Global_Sales < 60 & dados$NA_Sales < 5, ]
+
+# Segunda
+dados %>%
+  dplyr::filter(Genre %in% c('Puzzle', 'Sports'),
+                Publisher != 'Nintendo',
+                Global_Sales < 60,
+                NA_Sales < 5)
+
+```
+
+Fazem exatamente a mesma coisa, porém uma é um pouco mais simples de se ler e também de escrever.
+
+Beleza! Já sabemos como selecionar colunas e filtrar observações.
+
+**Agora iremos aprender a criar novas variáveis (colunas).**
+
+### Mutate
+Essa função permite que você crie colunas novas em seus dados de acordo com a sua necessidade. 
+
+Caso queira criar algo copiando o valor de um vetor já existente, você consegue. 
+
+Caso queira criar uma nova coluna de acordo com valores de outras colunas, você consegue também!
+
+Vamos supor que é de nosso interesse:
+
+- Criar uma categoria que evidencia a década de lançamento do jogo
+
+- Criar uma categoria que agrupa jogos em Mortal Kombat, Mário e Zelda (E o restante fica como NA)
+
+```{r}
+novo = dados %>% 
+  dplyr::mutate(
+    Decada = case_when(Year_of_Release < 1980 ~ '< 80s',
+                       between(x = Year_of_Release, left = 1980, right = 1989) ~ '80s',
+                       between(x = Year_of_Release, left = 1990, right = 1999) ~ '90s',
+                       between(x = Year_of_Release, left = 2000, right = 2009) ~ '00s',
+                       Year_of_Release > 2009 ~ '> 2009'
+                      ),
+    
+    Jogo_Famoso = case_when(grepl(x = Name, pattern = 'Mario', ignore.case = TRUE) ~ 'Mario',
+                            grepl(x = Name, pattern = 'Zelda', ignore.case = TRUE) ~ 'Zelda',
+                            grepl(x = Name, pattern = 'Mortal Kombat', ignore.case = TRUE) ~'MK',
+                            TRUE ~ 'Outros'
+                            )
+  ) %>%
+  dplyr::select(Name, Year_of_Release, Decada, Jogo_Famoso, Global_Sales)
+  
+```
+**E se quiséssemos ordenar as observações de acordo com alguma coluna?**
+
+### Arrange
+Possui como responsabilidade ordenar os dados, seja de maneira crecente ou decrescente. Basta especificar.
+
+Vamos ordenar de forma crescente pelo Ano e decrescente pelas Vendas. E retirando Jogos que sejam Outros.
+
+```{r}
+novo %>%
+  dplyr::filter(Jogo_Famoso != 'Outros') %>%
+  dplyr::arrange(Year_of_Release, desc(Global_Sales))  
+```
+
+### Group By e Summarise
+O group by é aliado de funções de agregação. Ele sozinho não fará nenhuma diferença observável (apenas mudará a maneira como o R lê os dados).
+
+Vamos supor que seja de seu interesse obter informação referente à um grupo, como por exemplo:
+
+- Vendas por Ano
+- Vendas totais e média por Ano e Gênero
+
+```{r}
+# Vendas por Ano
+dados %>%
+  group_by(Year_of_Release) %>%
+  summarise(Vendas = sum(Global_Sales)) %>%
+  arrange(desc(Year_of_Release))
+  
+  
+# Vendas por Ano e Gênero
+dados %>%
+  group_by(Year_of_Release, Genre) %>% 
+  summarise(Vendas_Total = sum(Global_Sales),
+            Vendas_Media = mean(Global_Sales)) %>% 
+  arrange(desc(Year_of_Release), Vendas_Total)
+  
+```
+
+O group by irá agrupar as colunas desejadas, e então ao utilizar uma função de agregação, como o summarise, todas as possíveis combinações de valores das colunas agrupadas serão contabilizadas como um grupo.
+
+E assim, aplicará a função desejada (no summarise) dentro de cada grupo.
+
+Algumas outras possíveis aplicações:
+
+- Aplicar a mesma função para múltiplas colunas
+- Calcular a porcentagem de cada gênero na receita total (todos os anos)
+
+```{r}
+# Aplicando a mesma função para diferentes colunas
+dados %>%
+  group_by(Year_of_Release) %>%
+  summarise_at(vars(Global_Sales, EU_Sales, JP_Sales, NA_Sales), function(x) mean(x)) %>%
+  arrange(desc(Year_of_Release))
+
+# Calculando a porcentagem de cada gênero na receita total
+dados %>% 
+  group_by(Genre) %>%
+  summarise(Venda_Genero = sum(Global_Sales)) %>%
+  mutate(Receita_Total = sum(Venda_Genero)) %>%
+  ungroup() %>%
+  mutate(Porcentagem = 100*Venda_Genero/Receita_Total) %>%
+  arrange(desc(Porcentagem))
+```
+
+Caso queira conferir funções prontas que dá para utilizar no Mutate() e no Summarise() basta verificar as seções "Vector Functions" e "Summary Functions" no cheatsheet https://github.com/rstudio/cheatsheets/blob/master/data-transformation.pdf
+
+
+# Tidyr
+
+Cheatsheet: https://github.com/rstudio/cheatsheets/blob/master/data-import.pdf
+
+O objetivo desta biblioteca é te ajudar a criar um "tidy data". Tidy data são dados que:
+
+- Cada coluna é uma variável
+- Cada linha é uma observação
+- Cada célula é um único valor
+
+Daremos foco para dois principais conceitos:
+
+1 - **Pivot:** convertendo o formato dos seus dados. Com as funções gather() e spread()
+
+2 - **Split and combine:** alterando colunas ou separando ou combinando. Com as funções separate() e unite()
+
+Nesta seção iremos utilizar outros dados para exemplificar de maneira mais visual.
+
+Teremos a Data e o Score de três atividades distintas (X, Y e Z).
+
+### Pivotando
+
+```{r}
+dados_tidyr <- tibble("Dia" = c("2019-07-08", "2019-07-07", 
+                                    "2019-07-06", "2019-07-05",
+                                    "2019-07-04", "2019-07-03",
+                                    "2019-07-02","2019-07-01"),
+                          X = rnorm(8) + 2,
+                          Y = rnorm(8) + 1.5,
+                          Z = rnorm(8)  + 3)
+
+dados_tidyr
+```
+
+É de nosso desejo ter uma coluna que evidencie qual é a atividade desempenhada, e outra qual é o score respectivo. De maneira grotesca: empilharemos nossos dados, tornando-os mais longos.
+
+```{r}
+dados_tidyr_longo <- dados_tidyr %>%
+  gather(key = "Atividade",
+         value = "Score",
+         X:Z
+  )
+
+dados_tidyr_longo
+```
+
+Supondo agora que estes dados fossem os originais e seja de nosso interesse torná-los mais amplos. De modo que tenha mais colunas e menos linhas. E que cada atividade seja uma coluna.
+
+```{r}
+dados_tidyr_amplo <- dados_tidyr_longo %>%
+  spread(key = Atividade,
+         value = Score)
+```
+#### Separate e Unite
+Como o próprio nome entrega, é para separar uma coluna em múltiplas ou unir múltiplas colunas em uma.
+
+Vamos supor que seja de nosso interesse ter uma coluna para ano, mês e dia separadamente. Bastaria:
+
+```{r}
+dados_tidyr_separado <- dados_tidyr %>%
+  separate(col = Dia, into = c("Ano", "Mes", "Dia"), sep = '-')
+
+dados_tidyr_separado
+
+```
+
+Agora, vamos supor que desejamos unir três colunas em apenas uma
+```{r}
+dados_tidyr_junto <- dados_tidyr_separado %>%
+  unite(c(Ano, Mes, Dia), col = Data, sep = '/')
+
+dados_tidyr_junto
+```
+
+
+# Purrr
+É o responsável pela Programação Funcional do universo Tidy. Substitui loops apenas com uma simples função, como por exemplo a map(), que é o seu caso mais simples.
+
+Supondo que nosso objetivo sejam estes:
+
+- Saber qual a correlação entre NA_Sales e EU_Sales para cada gênero.
+- Criar um modelo Linear (função lm()) para cada gênero.
+
+```{r}
+dados_split <- dados %>%
+  split(.$Genre)
+
+length(dados_split) %>%
+  print()
+
+dados_split[1:2]
+```
+
+```{r}
+dados_split %>%
+  map(~cor(.$NA_Sales, .$EU_Sales)) %>%
+  print()
+
+dados_split[1:3] %>%
+  map(~lm(Global_Sales ~ NA_Sales + EU_Sales, data = .)) %>%
+  map(summary)
+```

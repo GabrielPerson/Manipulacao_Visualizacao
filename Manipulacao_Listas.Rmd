@@ -1,0 +1,162 @@
+---
+title: "Explorando com R"
+subtitle: "Parte 1: Listas - como escalar códigos com funções e listas"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+O objetivo deste treinamento é ensinar uma maneira de eliminar o Ctrl C + Ctrl V dos seus códigos.
+
+Se você utiliza a mesma função mais de uma vez, alterando apenas algum argumento, você pode reduzir linhas de código apenas utilizando uma função genérica e salvando seus resultados em uma lista.
+
+Para abordar listas, é importante relembrar alguns conceitos básicos de programação no R, que são os objetos atômicos, vetores e fatores.
+
+### Atômicos
+Temos que os 3 mais simples são:
+
+- Character
+
+- Numeric
+    - Integer
+    - Double
+
+- Logical 
+
+
+### Vetores
+É a forma mais simples de se armazenar objetos atômicos. Porém os objetos dentro de um mesmo vetor precisam ter a mesma classe.
+
+Caso tente 'forçar' essa condição, o R irá transformar os objetos para que fiquem na mesma classe. Exemplos:
+
+```{r }
+# Integer/Numeric com character são forçados a character
+c(1, "str")
+
+# Integer/Numeric com logical são forçados a integer
+c(TRUE, FALSE, TRUE, 23)
+
+# Character com logical são forçados a character
+c(TRUE, FALSE, FALSE, 'str')
+
+```
+
+### Fatores
+Sua interpretação é semelhante à de um vetor atômico, porém não chega a ser um deles. Fatores são úteis para representar categorias, sejam elas nominais ou ordinais.
+
+O R entende um vetor de fatores a partir de seus rótulos. Em que cada rótulo, é uma categoria.
+
+A ordem das categorias pode importar dependendo do uso. Ao elaborar um gráfico por exemplo, em que o eixo X é um fator, ele ordenará de acordo com a ordem das categorias. Assim, é útil você definir a ordem de seus fatores de acordo com o desejado, principalmente se forem categorias ordinais, em que é desejado que sua ordem se mantenha.
+
+```{r cars}
+# Mulher como primeiro fator
+sexo_1 = factor(c('M', 'M', 'H', 'H', 'M'), levels = c('M', 'H'))
+levels(sexo_1)
+
+# Homem como primeiro fator
+sexo_2 = factor(c('M', 'M', 'H', 'H', 'M'), levels = c('H', 'M'))
+levels(sexo_2)
+
+```
+## Listas
+
+Agora, vamos de fato ao que interessa.
+
+Enquanto vetores atômicos são homogêneos (tudo pertence à uma mesma classe), as listas são heterogêneas. Uma maneira de se pensar em lista é como um conjunto de diferentes vetores.
+
+Mas essa explicação é muito grotesca, pois é possível armazenar qualquer tipo de objeto, sem restrições óbvias.
+
+Em uma mesma lista você pode armazenar um objeto de visualização, output de um modelo, data.frame, vetor de qualquer espécie ou um simples valor.
+
+Vamos criar uma lista composta por 6 objetos diferentes: gráfico, NA, data.frame, vetor, inteiro unitário e um modelo linear.
+
+```{r}
+require(ggplot2)
+y1 = ggplot(iris, aes(x = Sepal.Length, y = Petal.Length)) +
+  geom_point()
+
+y2 = NA
+
+y3 = head(iris) 
+
+y4 = c('Abacaxi', 'Limão', 'Melancia')
+
+y5 = 42
+
+y6 = lm(Sepal.Length ~ Sepal.Width + Petal.Width + Petal.Length, data = iris)
+
+y = list(y1, y2, y3, y4, y5, y6)
+
+print(y)
+```
+
+
+
+
+Uma das maiores funcionalidades que uma lista pode te proporcionar é a possibilidade de escalar códigos genéricos. Como por exemplo, produzir vários gráficos ou modelos em poucas linhas.
+
+### Aplicando a função `summary` em diferentes colunas 
+**Primeiro, iremos utilizar uma função simples em colunas de um banco de dados e armazenar o resultado.**
+
+```{r}
+summario_col = list() # Criando uma lista vazia
+
+for(i in 1:ncol(iris)){
+  summario_col[[i]] = summary(iris[, i])
+}
+
+summario_col
+
+```
+
+Esse foi um exemplo bem trivial. O importante é notar a infinidade de abordagens que isso trás:
+
+**Qualquer código que você deseja replicar algo semelhante a dados diferentes, é possível abordar dessa maneira!**
+
+Podemos criar qualquer tipo de função genérica, e então replicar em um laço.
+
+### Produção de gráficos para diferentes variáveis
+
+Podemos por exemplo, produzir todas as combinações possíveis de gráficos biplots com as 4 variáveis (colunas) numéricas do dataset Iris. Mais a frente deste tutorial ensinaremos como fazer gráficos, não se importe por enquanto com o plot produzido.
+
+Criaremos uma função genérica primeiro, e então produziremos em escala.
+
+```{r}
+graf_generico <- function(dados, x1, y1, color1){
+  
+  col      <- names(dados)
+  dados_aux <- dados[, c(x1, y1, color1)]
+  colnames(dados_aux) <- c('X', 'Y', 'Color')
+  
+  plot <- ggplot(data = dados_aux, aes(x = X, y = Y, color = Color)) +
+    geom_point() +
+    labs(x = col[x1],
+         y = col[y1])
+  
+  return(plot)
+}
+  
+lista    <- list()
+comb     <- combn(c(1:4), 2) # Combinações 2 a 2
+qtd_comb <- ncol(comb)
+
+print(comb)
+
+for(i in 1:qtd_comb){
+  x1 <- comb[1, i]
+  y1 <- comb[2, i]
+  lista[[i]] <- graf_generico(iris, x1, y1, 5)
+}
+
+print(lista)
+
+
+```
+
+Note que esse pedaço de código produziria tanto 1, 2, 3 , ..., 1 milhão de gráficos.
+
+Para apenas um ou dois gráficos, o esforço não valeria. Porém se você deseja fazer a mesma coisa algumas vezes repetidamente, é indiscutível o ganho que isso trás.
