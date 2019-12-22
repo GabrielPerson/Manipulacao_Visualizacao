@@ -181,7 +181,7 @@ Seus principais verbos são:
 Assim, iremos carregar nossos dados e dar uma leve explorada antes de iniciar a manipulação.
 
 ```{r}
-dados = read.csv2("C:\\Users\\55169\\Desktop\\Dev\\Manipulacao_Visualizacao\\games_data.csv", sep = ',') %>%
+dados = read.csv2("~/Dev/Manipulacao_Visualizacao/data/games_data.csv", sep = ',') %>%
   as_tibble()
 
 dados
