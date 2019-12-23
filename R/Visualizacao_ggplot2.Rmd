@@ -1,0 +1,577 @@
+---
+title: "Explorando com R"
+subtitle: "Parte 3: Visualização - como utilizar o ggplot2 para compreender seus resultados"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+O objetivo deste treinamento é fornecer no mínimo o básico necessário para se fazer visualizações decentes no ggplot2.
+
+O ggplot2 é uma ferramenta muito utilizada no contexto de visualização no R, porém nem sempre suas funcionalidades são bem exploradas.
+
+A principal vantagem do ggplot2 em relação a outros pacotes do R é a liberdade que ele te fornece de customizar o seu plot da maneira como você deseja, desde que saiba como fazê-lo.
+
+Irei referenciar o material do próprio criador do ggplot2 (dentro de Tidyverse): Hadley Wickham
+https://ggplot2-book.org/
+
+## Anatomia de um gráfico
+
+A forma como desenhamos é totalmente interativa, pois podemos adicionar funcionalidades na medida do necessário. Aqui podemos criar desde gráficos simples que não precisa de tanta firula para seu desenvolvimento, quanto gráficos mais complexos que precisam de uma maior atenção e regalias para sua produção.
+
+
+Todos os plots são compostos por:
+
+
+- **Data**: são eles que decidirão a **aesthetic** (estética), mapeando a responsabilidade de cada variável. Tais como eixo X, eixo Y, categorias, quem será colorido...
+
+- **Layers**: são responsáveis pelas **geometrias** do gráfico, podendo representar apenas formas geométricas padrão ou funções estatísticas.
+
+- **Facets**: especifica como o gráfico deve ser quebrado caso exista a necessidade. Como por exemplo tranformar um plot em 4 sub gráficos em que cada gráfico representa uma categoria A, B, C e D.
+
+- **Coordinate system**: te dá a possibilidade de utilizar coordenadas polares, por exemplo, ou girar gráficos em 90 graus. O usual é utilizar o sistema cartesiano.
+
+- **Scales**: responsável por traduzir valores dos dados para valores na estética desejada. Tais como coloração, tamanho, formato, redefinir legendas ou eixos...
+
+- **Theme**: controla a aparência geral do gráfico, como colorações do fundo, borda, linhas de eixo, fonte, dentre outros...
+
+Um gráfico que você define apenas os dados e a geometria funcionará, mas por baixo dos panos existe uma escala padrão, coordenadas padrão, faceta padrão e tema padrão. Assim, todo gráfico possui o esqueleto apresentado acima.
+
+Antes de especificar melhor individualmente a gramática do ggplot2, iremos olhar para uma construção etapa a etapa de um gráfico.
+
+Salvaremos o plot em um objeto denominado `plot`
+
+Para isso utilizaremos um conjunto de dados relacionado a venda de jogos e faremos uma breve manipulação, onde o intuito é visualizar quais são os 5 gêneros com maior venda global para as 4 plataformas com maiores vendas globais. E também evidenciar a participação das vendas da América do Norte nesse montante.
+
+```{r}
+require(tidyverse)
+raw_data <- read.csv2(file = "~/Dev/Manipulacao_Visualizacao/data/games_data.csv", sep = ",") %>%
+  as_tibble()
+
+# Arrumando numeros que estao como factor
+raw_data$Global_Sales <- raw_data$Global_Sales %>%
+  as.character() %>%
+  as.numeric()
+
+raw_data$NA_Sales <- raw_data$NA_Sales %>%
+  as.character() %>%
+  as.numeric()
+
+raw_data$EU_Sales <- raw_data$EU_Sales %>%
+  as.character() %>%
+  as.numeric()
+
+raw_data$JP_Sales <- raw_data$JP_Sales %>%
+  as.character() %>%
+  as.numeric()
+
+raw_data$Other_Sales <- raw_data$Other_Sales %>%
+  as.character() %>%
+  as.numeric()
+
+raw_data$Year_of_Release <- raw_data$Year_of_Release %>%
+  as.character() %>%
+  as.numeric()
+
+# Selecionar as 4 plataformas com mais vendas
+top_platforms <- raw_data %>%
+  group_by(Platform) %>%
+  summarise(Sales = sum(Global_Sales, na.rm = TRUE)) %>%
+  top_n(n = 4, wt = Sales) %>%
+  pull(Platform)
+  
+# Manipulando dados para nosso grafico
+data_platform_genre <- raw_data %>%
+  dplyr::filter(Platform %in% top_platforms) %>%
+  group_by(Platform, Genre) %>%
+  summarise(Sales = sum(Global_Sales, na.rm = TRUE),
+            Sales_NA = sum(NA_Sales, na.rm = TRUE)) %>%
+  arrange(desc(Sales)) %>%
+  group_by(Platform) %>%
+  top_n(n = 5, wt = Sales) %>%
+  ungroup() %>%
+  dplyr::mutate(NA_Percentual = 100*Sales_NA/Sales)
+
+print(data_platform_genre)
+
+  
+```
+
+**1) Data**
+
+Aparentemente nada irá acontecer, pois estamos apenas falando qual será a responsabilidade de cada variável, mas não colocamos nenhuma geometria.
+```{r}
+plot <- data_platform_genre %>%
+  ggplot(aes(x = Genre, y = Sales, fill = NA_Percentual))
+
+print(plot)
+```
+
+**2) Layers**
+
+Agora já podemos visualizar algo um pouco mais útil, pois acrescentamos a geometria de um gráfico de barras.
+
+Porém ainda assim a visualização ficará horrível, pois para cada pilha (gênero) teremos blocos referente às plataformas.
+
+```{r}
+plot <- plot +
+  geom_bar(stat = 'identity', position = 'dodge')
+
+print(plot)
+```
+
+**3) Facets**
+
+Para facilitar a visualização quebramos nosso gráfico para cada Plataforma existente, a fim de comparar os gêneros dentro de cada plataforma.
+
+Melhorou bastante, não? Porém ainda temos sobreposição nos label do eixo x...
+```{r} 
+plot <- plot +
+  facet_wrap( ~ Platform, ncol = 2, scales = "free") 
+
+print(plot)
+```
+
+**4) Coord**
+
+Assim, é de nosso interesse deixar as barras horizontais neste caso, para que os labels não sejam sobrepostos. Utilizaremos a função coord_flip.
+```{r}
+plot <- plot +
+  coord_flip()
+
+print(plot)
+```
+
+**5) Scales**
+
+Agora desejamos alterar as cores de nosso gradiente.
+```{r}
+plot <- plot +
+  scale_fill_gradient(low = "#17bcef", high = "#29323c")
+
+print(plot)
+```
+
+**6) Theme**
+
+E por último, iremos alterar o tema de nosso gráfico para algo bem minimalista.
+
+```{r}
+plot <- plot +
+  theme_minimal()
+
+print(plot)
+```
+
+
+Agora que conseguimos ter uma noção macro do processo de criação de um gráfico, podemos detalhar melhor cada processo de criação.
+
+Ainda não é o melhor gráfico para essa visualização, porém o intuito dessa etapa é apenar mostrar o processo macro. Após terminar a seção de Gramática do ggplot2 iremos produzir algumas possibilidades de visualizações completas.
+
+## Gramática do ggplot2
+Aqui daremos alguns exemplos de funcionalidades para cada etapa evidenciada acima.
+
+### 1) Data
+Para definir a estética de nosso gráfico temos dois argumentos óbvios que vêm à nossa mente: eixo x e eixo y, é claro. Porém não existem apenas eles... Temos alguns principais, como:
+
+1. colour - irá **colorir** baseado na variável desejada. Caso seja categórica irá atribuir uma cor por categoria. Caso seja numérica irá definir uma escala gradiente baseada no valor.
+
+2. fill - irá **preencher** baseado na variável desejada. Caso seja categórica irá atribuir uma cor por categoria. Caso seja numérica irá definir uma escala gradiente baseada no valor.
+
+**fill e colour possuem mesma funcionalidade, só que um preenche (Exemplo barras) e o outro colore (exemplo pontos e linhas)**
+
+3. shape - Irá distinguir formatos diferentes de acordo com os diferentes valores da variável desejada. Funciona para variáveis categóricas.
+
+4. size - Irá definir o tamanho das observações (sejam linhas ou pontos) baseado no valor da variável desejada.
+
+```{r}
+data_year <- raw_data %>%
+  group_by(Year_of_Release) %>%
+  summarise(Global = sum(Global_Sales, na.rm = TRUE),
+            NorthAmerica = sum(NA_Sales, na.rm = TRUE)) %>%
+  na.omit() %>%
+  ungroup()
+
+data_platform <- raw_data %>%
+  dplyr::filter(Platform %in% top_platforms,
+                Year_of_Release == 2016) %>%
+  group_by(Platform, Name) %>%
+  summarise(Global = sum(Global_Sales, na.rm = TRUE),
+            NorthAmerica = sum(NA_Sales, na.rm = TRUE)) %>%
+  ungroup()
+
+plot_colour <- data_year %>%
+  ggplot(aes(x = Year_of_Release, y = Global, colour = NorthAmerica)) +
+  geom_line() +
+  labs(title = "Colour por NorthAmerica")
+
+plot_fill <- data_platform %>%
+  ggplot(aes(x = Platform, y = Global, fill = Platform)) +
+  geom_boxplot() +
+  labs(title = "Fill por Platform")
+
+plot_shape <- data_platform %>%
+  ggplot(aes(x = NorthAmerica, y = Global, shape = Platform)) +
+  geom_point() +
+  labs(title = "Shape por Platform")
+
+plot_size <- data_year %>%
+  ggplot(aes(x = Year_of_Release, y = Global, size = NorthAmerica)) +
+  geom_line() +
+  labs(title = "Size por NorthAmerica")
+
+plots <- gridExtra::grid.arrange(plot_colour, plot_fill, plot_shape, plot_size)
+
+
+```
+
+A princípio todas as **aesthetics** foram dadas no próprio ggplot(), porém podemos atribuir a estética para cada geom_xxx diferente. Exemplo:
+
+```{r}
+p <- data_year %>%
+  ggplot() +
+  geom_line(aes(x = Year_of_Release, y = Global), colour = "red") + 
+  geom_point(aes(x = Year_of_Release, y = NorthAmerica), colour = "blue")
+
+plot(p)
+```
+
+A escala do eixo Y acaba sendo atribuída para a primeira estética, do geom_line, mas isso não impede de adicionar novas geometrias para variáveis diferentes.
+
+Mas cuidado!!! Nem sempre só porque o código "rodou" quer dizer que faz sentido. 
+
+Vamos olhar este dois novos gráficos:
+
+```{r}
+errado_1 <- data_year %>%
+  ggplot() +
+  geom_point(aes(x = Year_of_Release, y = Global, colour = "yellow"))
+
+errado_2 <- data_year %>%
+  ggplot() +
+  geom_line(aes(x = Year_of_Release, y = Global), colour = "red") + 
+  geom_point(aes(x = Global, y = NorthAmerica), colour = "blue")
+
+gridExtra::grid.arrange(errado_1, errado_2)
+
+```
+
+Note que o primeiro gráfico colocamos "colour" dentro da função aes() que cuida da estética do gráfico. A função aes() espera que direcionemos apenas **variáveis**, assim quando utilizamos `colour = "yellow"` na verdade estamos criando uma nova coluna em que todos os valores são `=="yellow"`, e assim todos recebem a mesma cor padrão.
+
+Note que o segundo gráfico colocamos duas geometrias diferentes com escalas **totalmente diferentes** no eixo X. Perdendo totalmente o sentido a visualização do gráfico.
+
+Por isso, preste atenção no que está fazendo. Não é porque não deu "erro" que está certo.
+
+### Layers
+Como é um pouco difícil de mostrar como funciona a estética sem utilizar a geometria, alguns pontos já foram abordados previamente.
+
+Iremos apenas reforçar alguns conceitos e possibilidades aqui.
+
+A magia de se poder utilizar diferentes geometrias e cada uma possuir a sua própria estética aumenta muito as possibilidades de visualização.
+
+Vamos supor que seja de nosso interesse fazer um gráfico em que tenha uma geometria **"geral"** que resume os dados, mas gostaríamos de verificar como os dados se comportam em determinados grupos. Como isso seria possível se não tivesse isso?
+
+Veja que ridículo fica quando tentamos erroneamento fazer isto
+```{r}
+errado <- data_platform_genre %>%
+    ggplot(aes(x = Sales_NA, y = Sales, colour = Platform)) + 
+    geom_point() +
+    geom_smooth(method = 'lm')
+
+print(errado)
+```
+
+**Agora, a abordagem correta poderia ser:**
+
+```{r}
+correto <- data_platform_genre %>%
+    ggplot(aes(x = Sales_NA, y = Sales)) + 
+    geom_point(aes(colour = Platform)) +
+    geom_smooth(method = 'lm')
+
+print(correto)
+```
+
+Apenas listando quais são algumas das geometrias disponíveis, temos:
+
+1. `geom_boxplot()`
+
+2. `geom_histogram()`
+
+3. `geom_point()`
+
+4. `geom_line()`
+
+5. `geom_jitter()` - é tipo o geom_point, porém quando temos muitos pontos no mesmo local, irá fazer um leve ruído para fazer volume.
+
+6. `geom_bar()` - esse tem que tomar cuidado, normalmente precisamos utilizar os parâmetros `stat = 'identity'`para o ggplot saber que não estamos lidando com contagem de elementos (default) e se queremos que as barras não sejam empilhadas, precisamos do argumento `position = 'dodge'`, por default temos `position = 'stacked'`.
+
+7. `geom_smooth()` - irá fazer uma suavização da reta dos pontos através de alguns métodos que você pode escolher, como por exemplo ajustar um modelo linear `method = 'lm'`
+
+### Facetas
+Esse recurso é muito útil quando desejamos ver muitas coisas distintas no mesmo gráfico. Há momentos em que apenas os recursos de quebra na estética e geometria se tornam insuficientes. E por isso precisamos de uma nova maneira de quebrar nossos dados.
+
+Para isso temos o recurso de criar facetas, por meio de duas funções maravilhosas:
+
+1. `facet_grid(vertical ~ horizontal)` - Irá dividir seus dados em até duas variáveis. Caso queira apenas uma variável, basta: `( .~horizontal)` ou `(vertical~.)`
+
+2. `facet_wrap(~ variavel, ncol = x)` - Irá dividir seus dados como se fosse uma matriz, de acordo com quantas colunas você deseja.
+
+Casos em que desejamos selecionar somente uma variável, normalmente o mais útil é o **wrap**, assim como utilizamos no primeiro exemplo deste projeto.
+
+Quando desejamos dividir em combinações de variáveis na quebra, faz mais sentido utilizar o **grid**.
+
+Para dar um exemplo de **grid** utilizaremos um banco de dados semelhante ao `data_platform_genre`criado anteriormente, porém pegaremos o comportamento temporal do mesmo.
+
+```{r}
+top_genre <- raw_data %>%
+  group_by(Genre) %>%
+  summarise(Sales = sum(Global_Sales, na.rm = TRUE)) %>%
+  top_n(n = 4, wt = Sales) %>%
+  pull(Genre)
+
+data_platform_genre_temporal <- raw_data %>%
+  dplyr::filter(Platform %in% top_platforms,
+                Genre %in% top_genre) %>%
+  group_by(Platform, Genre, Year_of_Release) %>%
+  summarise(Sales = sum(Global_Sales, na.rm = TRUE),
+            Sales_NA = sum(NA_Sales, na.rm = TRUE)) %>%
+  ungroup() %>%
+  dplyr::mutate(NA_Percentual = 100*Sales_NA/Sales) %>%
+  ungroup()
+
+plot_grid <- data_platform_genre_temporal %>%
+  ggplot(aes(x = Year_of_Release, y = Sales)) +
+  geom_line() +
+  facet_grid(Platform~Genre)
+
+print(plot_grid)
+
+```
+
+Esse gráfico em questão acabou ficando bem ruim, mas o importante é que provavelmente vocês entenderam o ponto:
+
+Se tu desejas fazer combinações de duas variáveis ou manter tudo na horizontal/vertical (com apenas uma variável) o que você está buscando é o **grid**.
+
+Se tu desejas pegar somente uma variável e fazer uma matriz em que você controla a quantidade de colunas, o que você precisa é o **wrap**.
+
+Para ambas funções, existe o argumento `scales = ...` em que:
+
+1. `"fixed"` (default) deixa todos os eixos com mesma escala
+
+2. `"free_x"` deixa o eixo x livre e fixa o eixo y
+
+3. `"free_y"` deixa o eixo y livre e fixa o eixo x
+
+4. `"free"` ambos eixos ficam livres
+
+Replicarei o gráfico acima, porém com eixos livres.
+Porém, note que a liberdade é para linha e coluna, e não por célula. Pois é onde reside o valor da escala.
+
+Assim, para o nosso caso, o eixo x (dos anos) não fará nenhuma mudança, apenas o eixo y.
+
+```{r}
+plot_grid_free <- data_platform_genre_temporal %>%
+  ggplot(aes(x = Year_of_Release, y = Sales)) +
+  geom_line() +
+  facet_grid(Platform~Genre, scales = "free")
+
+plot(plot_grid_free)
+```
+
+**Os três tópicos acima são os mais importantes, e que serão utilizados muitas vezes, os três restantes são menos importantes**
+
+### Coordenadas polares
+Aqui mostrarei apenas como fazer um gráfico de pizza, não entrarei em muitos detalhes.
+
+Caso tenha interesse nesse tópico, olhar a documentação em https://ggplot2-book.org/coord.html.
+
+Eu particularmente nunca uso gráfico de pizza, detesto. Quase sempre a visualização se torna mais difícil do que um simples gráfico de barras.
+
+Mas a fim de documentação e aprendizado, sintetizarei aqui o procedimento.
+
+Utilizarei uma cópia descarada da seguinte referência: https://www.datanovia.com/en/blog/how-to-create-a-pie-chart-in-r-using-ggplot2/
+
+```{r}
+colors <- mycols <- c("#0073C2FF", "#EFC000FF", "#868686FF", "#CD534CFF")
+data_pie <- data.frame(
+  group=LETTERS[1:4],
+  value=c(13,7,9,21)) %>%
+  # A gambiarra aqui debaixo é para deixar os labels exatamente no meio das barras
+  arrange(desc(group)) %>%
+  mutate(lab.ypos = cumsum(value) - 0.5*value)
+
+pizza <- data_pie %>%
+  ggplot(aes(x = "", y = value, fill = group)) +
+  geom_bar(width = 1, stat = "identity", color = "white") +
+  coord_polar("y", start = 0)+
+  geom_text(aes(y = lab.ypos, label = group), color = "white")+
+  scale_fill_manual(values = colors) +
+  theme_void()
+
+retangulo <- data_pie %>%
+  ggplot(aes(x = "", y = value, fill = group)) +
+  geom_bar(width = 1, stat = "identity", color = "white") +
+  #coord_polar("y", start = 0)+
+  geom_text(aes(y = lab.ypos, label = group), color = "white")+
+  scale_fill_manual(values = colors) +
+  theme_void()
+
+gridExtra::grid.arrange(retangulo, pizza)
+
+
+```
+
+### Escala
+Quase não tem o que falar aqui.
+
+Basicamente é: quando você não estiver satisfeito com a escala padrão que o ggplot te fornecer, você provavelmente precisará utilizar alguma função do tipo: `scale_abc_def`. 
+
+As mais úteis acabam sendo as que trocam as cores do seu gráfico e cortam os eixos. Por exemplo:
+
+1. `scale_x_continuous` (em que "x" pode ser y", e "continuous" pode ser "discrete"). Temos como argumentos, `limits = c(a, b)` que define os limites  do gráfico, `breaks = c(a, b, c, d)`que define os pontos que teremos os cortes do gráfico e `labels = c("a", "b", "c", "d")` que define o label que aparecerá em cada corte.
+
+O labels pode ser um tiro no pé, pois quando colocamos o argumento "break", ele automaticamente já coloca o label correspondente. Como podemos ver abaixo.
+
+
+```{r}
+label_ruim <- raw_data %>%
+  group_by(Year_of_Release) %>%
+  summarise(Sales = sum(Global_Sales, na.rm = TRUE)) %>%
+  ungroup() %>%
+  ggplot(aes(x = Year_of_Release, y = Sales)) +
+  geom_line() +
+  scale_x_continuous(limits = c(1990, 2015),
+                     breaks = seq(1990, 2015, by = 5),
+                     labels = letters[1:6])
+
+plot(label_ruim)
+```
+
+O uso do argumento labels é útil quando temos algumas categorias na variavel e seu nome pode estar "zoado" e você deseja consertar.
+
+2. `scale_fill_manual` (em que "fill" pode ser "color" e "manual" poderia ser "brewer/gradient/..."). É para colorir ou preencher seus gráficos com paletas já existentes, com o "brewer", ou criar um gradiente a partir de duas cores com o "gradient", ou passar todas as cores na mão via hexadecimal "#000000" com o "manual".
+
+### Temas
+É basicamente a aparência geral do seu gráfico, tais como cores de fundo, borda, linhas, etc...
+
+Não é nada intrínseco à estética e geometria, são os adornos em segundo plano.
+
+Existem temas já pré-definidos, e basta adicioná-los com `+ theme_XYZ()`. Alguns já existentes são theme_bw, theme_minimal, theme_classic e theme_void.
+
+Você mesmo pode criar o seu próprio tema, basta criar uma função. Tome por exemplo a implementação da função theme_bw()
+
+```{r}
+theme_bw_exemple <- function (base_size = 12, base_family = "") 
+{
+  theme_grey(base_size = base_size, base_family = base_family) %+replace% 
+    theme(axis.text = element_text(size = rel(0.8)), 
+    axis.ticks = element_line(colour = "black"), 
+    legend.key = element_rect(colour = "grey80"), 
+    panel.background = element_rect(fill = "white", colour = NA), 
+    panel.border = element_rect(fill = NA, colour = "grey50"), 
+    panel.grid.major = element_line(colour = "grey90", size = 0.2), 
+    panel.grid.minor = element_line(colour = "grey98", size = 0.5), 
+    strip.background = element_rect(fill = "grey80", colour = "grey50", 
+                                    size = 0.2))
+}
+```
+
+## Exemplos de visualizações.
+
+Aqui daremos breves exemplos de manipulações que precisam de pelo menos 3 camadas para serem produzidas, além de alguns cuidados extras de manipulação que talvez você possa precisar algum dia na vida.
+
+```{r}
+require(tidytext)
+```
+**Quais são os gêneros de maiores vendas para as quatro maiores plataformas? Evidenciando a participação de vendas da América do Norte.**
+
+Perceba que aqui temos um trabalho em ordenar de acordo com fatores dentro de cada faceta, por isso precisamos utilizar as funções `reorder_within(quem sera ordenado, em relacao a quem, quem define a faceta)` e `scale_x_reordered()`
+
+```{r}
+
+p1 <- data_platform_genre %>%
+  ggplot(aes(x = reorder_within(Genre, Sales, Platform), 
+             y = Sales, fill = NA_Percentual)) + 
+  geom_bar(stat = 'identity') + 
+  coord_flip() +
+  scale_x_reordered()+
+  scale_fill_gradient(low = "#e4efe9", high = "#29323c") + 
+  facet_wrap(~ Platform, ncol = 2, scales = "free_y") +
+  theme_bw() +
+  labs(y = "Vendas Globais",
+       x = "",
+       title = "Vendas dos melhores gêneros das maiores plataformas",
+       subtitle = "Evidenciando a participação das vendas na América do Norte",
+       fill = "Vendas NA (%)")
+
+plot(p1)
+```
+
+
+**Qual foi o comportamento das vendas de cada Publisher no decorrer dos anos?**
+
+Note a necessidade de se utilizar a função `gather()`para empilhar os dados e tornar possível uma variável que define qual região que estamos lidando. Sem utilizar esta artimanha a outra possibilidade seria fazer pontos diferentes (por cor ou formato) dentro de um mesmo subgráfico, em que EU, JP e NA seram geom_points() diferentes.
+
+```{r}
+top_publishers <- raw_data %>% 
+  group_by(Publisher) %>%
+  summarise(Global = sum(Global_Sales, na.rm = TRUE)) %>%
+  top_n(n = 3, wt = Global) %>%
+  pull(Publisher)
+
+p2 <- raw_data %>%
+  dplyr::filter(Publisher %in% top_publishers) %>%
+  group_by(Publisher, Year_of_Release) %>%
+  summarise_if(is.numeric, list(sum = sum)) %>%
+  tidyr::gather(key = Regiao, value = Vendas, NA_Sales_sum:JP_Sales_sum) %>%
+  ggplot(aes(x = Year_of_Release, y = Vendas, colour = Global_Sales_sum)) +
+  geom_point() +
+  facet_grid(Publisher~Regiao) +
+  labs(x = "Ano",
+       y = "Venda Global") +
+  scale_x_continuous(breaks = seq(1980, 2020, by = 8))
+
+plot(p2)
+```
+
+
+
+**Qual jogo foi campeão de vendas global de cada década?**
+
+Também foi necessário uma ordenação de um eixo em relação a um outro valor numérico. Porém como não estamos lidando com facetas, a função `reorder()`é suficiente. A função que redefinimos Decada como um fator foi necessária para estabelecer a ordem das décadas.
+
+```{r}
+p3 <- raw_data %>%
+  mutate(Decada = case_when(
+                            between(Year_of_Release, left = 1981, right = 1990) ~ '80s',
+                            between(Year_of_Release, left = 1991, right = 2000) ~ '90s',
+                            between(Year_of_Release, left = 2001, right = 2010) ~ '00s',
+                            between(Year_of_Release, left = 2011, right = 2020) ~ '10s'
+                            )
+        ) %>%
+  group_by(Name, Decada) %>%
+  summarise(Vendas = sum(Global_Sales, na.rm = TRUE)) %>%
+  group_by(Decada) %>%
+  top_n(1, wt = Vendas) %>%
+  ungroup() %>%
+  mutate(Decada = factor(Decada, levels = c("80s", "90s", "00s", "10s"))) %>%
+  na.omit() %>% # Aqui corta os que venderam em 1980
+  ggplot(aes(x = reorder(Name, -Vendas), y = Vendas, fill = Decada)) +
+  geom_bar(stat = 'identity', position = 'dodge') +
+  coord_flip() +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal() +
+  labs(x = "Jogos da Década",
+       y = "Venda Global")
+
+plot(p3)
+  
+
+```
+
+
